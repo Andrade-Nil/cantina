@@ -104,6 +104,70 @@ def create_table():
         ''')
 
 
+
+# Função para popular o banco de dados
+# def popular_banco_dados():
+#     # Popula o banco de dados com 300 alunos fictícios
+#     for i in range(300):
+#         nome = f'Aluno {i+1}'
+#         turno = random.choice(['Manhã', 'Tarde'])
+#         ano = random.choice(['Bercario-A', 'Bercario-B', 'Maternal-A', 'Maternal-B', 'Nivel-I-A', 'Nivel-I-B', 'Nivel-II-A', 'Nivel-II-B', 'Nivel-III-A', 'Nivel-III-B', '1-ano-A', '1-ano-B', '2-ano-A', '2-ano-B', '3-ano-A', '3-ano-B', '4-ano-A', '4-ano-B', '5-ano', '6-ano', '7-ano', '8-ano', '9-ano'])
+#         responsavel = f'Responsável {i+1}'
+#         contato = f'(00) 0000-000{i+1}'
+#         credito = f'{random.randint(0, 1000):.2f}'.replace('.', ',')
+
+#         # Insere o aluno no banco de dados
+#         with sqlite3.connect(DATABASE) as con:
+#             cur = con.cursor()
+#             cur.execute(
+#                 'INSERT INTO alunos (nome, turno, ano, responsavel, contato, credito) VALUES (?, ?, ?, ?, ?, ?)',
+#                 (nome, turno, ano, responsavel, contato, credito)
+#             )
+#             con.commit()
+
+#     # Popula o banco de dados com alguns dados de consumo e pagamentos para cada aluno
+#     for aluno_id in range(1, 301):
+#         # Popula o banco de dados com alguns dados de consumo para cada dia da semana
+#         for dia in ['segunda', 'terca', 'quarta', 'quinta', 'sexta']:
+#             consumo_diario = round(random.uniform(0, 20), 2)
+#             data_consumo = datetime.now() - timedelta(days=random.randint(0, 30))
+
+#             # Insere os dados de consumo no banco de dados
+#             with sqlite3.connect(DATABASE) as con:
+#                 cur = con.cursor()
+#                 cur.execute(
+#                     'INSERT INTO historico_consumo (aluno_id, data, valor, tipo_transacao) VALUES (?, ?, ?, ?)',
+#                     (aluno_id, data_consumo, consumo_diario, 'consumo')
+#                 )
+#                 con.commit()
+
+#         # Popula o banco de dados com alguns dados de pagamento
+#         for _ in range(random.randint(1, 5)):
+#             valor_pagamento = round(random.uniform(0, 100), 2)
+#             data_pagamento = datetime.now() - timedelta(days=random.randint(0, 30))
+
+#             # Insere os dados de pagamento no banco de dados
+#             with sqlite3.connect(DATABASE) as con:
+#                 cur = con.cursor()
+#                 cur.execute(
+#                     'INSERT INTO historico_consumo (aluno_id, data, valor, tipo_transacao) VALUES (?, ?, ?, ?)',
+#                     (aluno_id, data_pagamento, valor_pagamento, 'pagamento')
+#                 )
+#                 con.commit()
+
+# if __name__ == '__main__':
+#     create_table()
+#     popular_banco_dados()
+#     print('Banco de dados populado com sucesso!')
+
+
+
+
+
+
+
+
+
 # Rota para lidar com o envio do formulário
 @app.route('/cadastrar', methods=['GET', 'POST'])
 def cadastrar():
@@ -212,7 +276,7 @@ def historico(aluno_id):
     con.row_factory = sqlite3.Row
     cur = con.cursor()
     cur.execute(
-        'SELECT data, valor, tipo_transacao FROM historico_consumo WHERE aluno_id = ? ORDER BY data DESC',
+        'SELECT data, valor, tipo_transacao FROM historico_consumo WHERE aluno_id = ?',
         (aluno_id, ))
     historico_consumo = cur.fetchall()
 
@@ -226,6 +290,38 @@ def historico(aluno_id):
   return render_template('historico.html',
                          aluno=aluno,
                          historico_consumo=historico_consumo)
+
+
+# Modifique a rota /atualizar_consumo_diario para lidar com a atualização dos valores diários
+@app.route('/atualizar_consumo_diario', methods=['POST'])
+def atualizar_consumo_diario():
+  try:
+    data = json.loads(request.data)
+    aluno_id = int(data['alunoId'])
+    dia_semana = data['diaSemana']
+    consumo_diario = float(data['consumoDiario'])
+
+    # Atualizar o consumo diário no banco de dados
+    with sqlite3.connect(DATABASE) as con:
+      cur = con.cursor()
+      cur.execute(f'UPDATE alunos SET {dia_semana} = ? WHERE id = ?',
+                  (consumo_diario, aluno_id))
+      con.commit()
+
+    # Atualizar o valor total da semana no banco de dados
+    with sqlite3.connect(DATABASE) as con:
+      cur = con.cursor()
+      cur.execute(
+          'UPDATE alunos SET credito = ?, segunda = ?, terca = ?, quarta = ?, quinta = ?, sexta = ? WHERE id = ?',
+          (consumo_diario + aluno['credito'], segunda, terca, quarta, quinta,
+           sexta, aluno_id))
+      con.commit()
+
+    
+
+    return jsonify({'success': True})
+  except Exception as e:
+    return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/subtrair_credito', methods=['POST'])
@@ -256,7 +352,7 @@ def subtrair_credito():
             'aluno_id':
             aluno_id,
             'data':
-            datetime.now(pytz.timezone('America/Sao_Paulo')).strftime(
+            datetime.now(pytz.timezone('America/Campo_Grande')).strftime(
                 '%d-%m-%Y %H:%M:%S'),
             'valor':
             consumo_total,
